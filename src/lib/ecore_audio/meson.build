@@ -6,6 +6,7 @@ pub_eo_files = [
   'ecore_audio.eo',
   'ecore_audio_in.eo',
   'ecore_audio_out.eo',
+  'ecore_audio_out_system.eo',
   'ecore_audio_in_sndfile.eo',
   'ecore_audio_out_sndfile.eo',
   'ecore_audio_out_pulse.eo',
@@ -35,6 +36,7 @@ ecore_audio_header_src = [
   'ecore_audio_obj.h',
   'ecore_audio_obj_in.h',
   'ecore_audio_obj_out.h',
+  'ecore_audio_obj_out_system.h',
   'ecore_audio_obj_in_tone.h',
   'ecore_audio_protected.h',
   'ecore_audio_obj_out_pulse.h',
@@ -48,6 +50,7 @@ ecore_audio_src = files([
   'ecore_audio_obj.c',
   'ecore_audio_obj_in.c',
   'ecore_audio_obj_out.c',
+  'ecore_audio_obj_out_system.c',
   'ecore_audio_obj_in_tone.c',
   'ecore_audio_private.h'
 ])

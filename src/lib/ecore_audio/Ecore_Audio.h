@@ -214,6 +214,7 @@ ECORE_AUDIO_API void                ecore_audio_obj_name_set(Efl_Object* obj, co
 #include <ecore_audio_obj.h>
 #include <ecore_audio_obj_in.h>
 #include <ecore_audio_obj_out.h>
+#include <ecore_audio_obj_out_system.h>
 
 #include <ecore_audio_obj_in_sndfile.h>
 #include <ecore_audio_obj_out_sndfile.h>

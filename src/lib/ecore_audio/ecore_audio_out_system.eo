@@ -1,0 +1,27 @@
+class @beta Ecore.Audio.Out.System extends Ecore.Audio.Out
+{
+   [[Portable audio output using WASAPI on Windows and PulseAudio elsewhere.
+
+     Construction fails if the platform backend is unavailable. Inputs are
+     attached to the owned backend, so Ecore.Audio.In.output returns that
+     backend. Input lists and playback capabilities follow the backend.
+   ]]
+   c_prefix: ecore_audio_obj_out_system;
+   event_c_prefix: ecore_audio_out_system;
+   implements {
+      Efl.Object.constructor;
+      Efl.Object.destructor;
+      Ecore.Audio.volume { set; get; }
+      Ecore.Audio.paused { set; get; }
+      @empty Ecore.Audio.format { set; get; }
+      @empty Ecore.Audio.source { set; get; }
+      Ecore.Audio.Out.input_attach;
+      Ecore.Audio.Out.input_detach;
+      Ecore.Audio.Out.inputs_get;
+   }
+   events {
+      context,ready: void; [[Called when the backend is ready for playback.]]
+      context,fail: void; [[Called when the backend context fails.]]
+      stop: void; [[Forwarded when the backend requests a stop (WASAPI only).]]
+   }
+}
