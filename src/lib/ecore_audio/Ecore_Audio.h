@@ -61,6 +61,7 @@ enum _Ecore_Audio_Type {
     ECORE_AUDIO_TYPE_CORE_AUDIO, /**< Use Core Audio module (Apple) - DEPRECATED */
     ECORE_AUDIO_TYPE_CUSTOM,  /**< Use custom module */
     ECORE_AUDIO_TYPE_WASAPI,  /**< Use Wasapi module @since 1.21*/
+    ECORE_AUDIO_TYPE_PIPEWIRE, /**< Use PipeWire module */
     ECORE_AUDIO_MODULE_LAST,  /**< Sentinel */
 };
 
@@ -222,6 +223,7 @@ ECORE_AUDIO_API void                ecore_audio_obj_name_set(Efl_Object* obj, co
 #include <ecore_audio_obj_in_tone.h>
 
 #include <ecore_audio_obj_out_pulse.h>
+#include <ecore_audio_obj_out_pipewire.h>
 
 #include <ecore_audio_obj_out_wasapi.h>
 

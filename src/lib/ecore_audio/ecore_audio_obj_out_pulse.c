@@ -25,6 +25,155 @@ extern pa_mainloop_api functable;
 #define MY_CLASS ECORE_AUDIO_OUT_PULSE_CLASS
 #define MY_CLASS_NAME "Ecore_Audio_Out_Pulse"
 
+/* Keep the library loaded across ecore_audio_shutdown(): objects and deferred
+ * cleanup jobs may still call PulseAudio.
+ */
+Ecore_Audio_Lib_Pulse *ecore_audio_pulse_lib = NULL;
+
+Eina_Bool
+ecore_audio_pulse_lib_load(void)
+{
+   if (ecore_audio_pulse_lib)
+     {
+        if (!ecore_audio_pulse_lib->mod) return EINA_FALSE;
+        return EINA_TRUE;
+     }
+
+   ecore_audio_pulse_lib = calloc(1, sizeof(Ecore_Audio_Lib_Pulse));
+   if (!ecore_audio_pulse_lib) return EINA_FALSE;
+# define LOAD(x)                                               \
+   if (!ecore_audio_pulse_lib->mod) {                          \
+      if ((ecore_audio_pulse_lib->mod = eina_module_new(x))) { \
+         if (!eina_module_load(ecore_audio_pulse_lib->mod)) {  \
+            eina_module_free(ecore_audio_pulse_lib->mod);      \
+            ecore_audio_pulse_lib->mod = NULL;                 \
+         }                                                     \
+      }                                                        \
+   }
+# if defined(_WIN32) || defined(__CYGWIN__)
+   LOAD("libpulse-0.dll");
+   LOAD("libpulse.dll");
+   LOAD("pulse.dll");
+   if (!ecore_audio_pulse_lib->mod)
+     ERR("Could not find libpulse-0.dll, libpulse.dll, pulse.dll");
+# elif defined(__APPLE__) && defined(__MACH__)
+   LOAD("libpulse.0.dylib");
+   LOAD("libpulse.0.so");
+   LOAD("libpulse.so.0");
+   if (!ecore_audio_pulse_lib->mod)
+     ERR("Could not find libpulse.0.dylib, libpulse.0.so, libpulse.so.0");
+# else
+   LOAD("libpulse.so.0");
+   if (!ecore_audio_pulse_lib->mod)
+     ERR("Could not find libpulse.so.0");
+# endif
+# undef LOAD
+   if (!ecore_audio_pulse_lib->mod) return EINA_FALSE;
+
+#define SYM(x) \
+   if (!(ecore_audio_pulse_lib->x = eina_module_symbol_get(ecore_audio_pulse_lib->mod, #x))) { \
+      ERR("Cannot find symbol '%s' in'%s", #x, eina_module_file_get(ecore_audio_pulse_lib->mod)); \
+      goto err; \
+   }
+   SYM(pa_mainloop_new);
+   SYM(pa_mainloop_free);
+   SYM(pa_mainloop_get_api);
+   SYM(pa_mainloop_prepare);
+   SYM(pa_mainloop_poll);
+   SYM(pa_mainloop_dispatch);
+   SYM(pa_context_new);
+   SYM(pa_context_unref);
+   SYM(pa_context_connect);
+   SYM(pa_context_disconnect);
+   SYM(pa_context_set_sink_input_volume);
+   SYM(pa_context_get_state);
+   SYM(pa_context_set_state_callback);
+   SYM(pa_operation_unref);
+   SYM(pa_cvolume_set);
+   SYM(pa_stream_new);
+   SYM(pa_stream_unref);
+   SYM(pa_stream_connect_playback);
+   SYM(pa_stream_disconnect);
+   SYM(pa_stream_drain);
+   SYM(pa_stream_flush);
+   SYM(pa_stream_cork);
+   SYM(pa_stream_write);
+   SYM(pa_stream_begin_write);
+   SYM(pa_stream_set_write_callback);
+   SYM(pa_stream_trigger);
+   SYM(pa_stream_update_sample_rate);
+   SYM(pa_stream_get_index);
+#undef SYM
+   return EINA_TRUE;
+err:
+   if (ecore_audio_pulse_lib->mod)
+     {
+        eina_module_free(ecore_audio_pulse_lib->mod);
+        ecore_audio_pulse_lib->mod = NULL;
+        ERR("Cannot find libpulse at runtime!");
+     }
+   return EINA_FALSE;
+}
+
+void
+ecore_audio_pulse_lib_unload(void)
+{
+   if (ecore_audio_pulse_lib)
+     {
+        if (ecore_audio_pulse_lib->mod)
+          eina_module_free(ecore_audio_pulse_lib->mod);
+        free(ecore_audio_pulse_lib);
+        ecore_audio_pulse_lib = NULL;
+     }
+}
+
+static Eina_Bool _probe_checked;
+static Eina_Bool _probe_available;
+
+Eina_Bool
+_ecore_audio_out_pulse_probe(void)
+{
+   pa_mainloop *loop;
+   pa_context *context;
+   pa_context_state_t state;
+   double deadline, remaining;
+
+   if (_probe_checked) return _probe_available;
+   _probe_checked = EINA_TRUE;
+   if (!EPA_LOAD()) return EINA_FALSE;
+   loop = EPA_CALL(pa_mainloop_new)();
+   if (!loop) return EINA_FALSE;
+   context = EPA_CALL(pa_context_new)(EPA_CALL(pa_mainloop_get_api)(loop),
+                                     "ecore_audio_probe");
+   if (!context) goto end;
+   /* Detect an existing server; do not start one merely to probe it. */
+   if (EPA_CALL(pa_context_connect)(context, NULL, PA_CONTEXT_NOAUTOSPAWN,
+                                    NULL) < 0) goto disconnect;
+   deadline = ecore_time_get() + 0.5;
+   for (;;)
+     {
+        state = EPA_CALL(pa_context_get_state)(context);
+        if (state == PA_CONTEXT_READY)
+          {
+             _probe_available = EINA_TRUE;
+             break;
+          }
+        if (!PA_CONTEXT_IS_GOOD(state)) break;
+        remaining = deadline - ecore_time_get();
+        if (remaining <= 0.0) break;
+        if (EPA_CALL(pa_mainloop_prepare)(loop, (int)(remaining * 1000000)) < 0)
+          break;
+        if (EPA_CALL(pa_mainloop_poll)(loop) < 0) break;
+        if (EPA_CALL(pa_mainloop_dispatch)(loop) < 0) break;
+     }
+disconnect:
+   EPA_CALL(pa_context_disconnect)(context);
+   EPA_CALL(pa_context_unref)(context);
+end:
+   EPA_CALL(pa_mainloop_free)(loop);
+   return _probe_available;
+}
+
 struct _Ecore_Audio_Out_Pulse_Data
 {
    pa_mainloop_api *api;
@@ -35,6 +184,25 @@ struct _Ecore_Audio_Out_Pulse_Data
 };
 
 typedef struct _Ecore_Audio_Out_Pulse_Data Ecore_Audio_Out_Pulse_Data;
+
+EOLIAN static void
+_ecore_audio_out_pulse_ecore_audio_paused_set(Eo *eo_obj, Ecore_Audio_Out_Pulse_Data *pd EINA_UNUSED, Eina_Bool paused)
+{
+   Ecore_Audio_Output *out_obj = efl_data_scope_get(eo_obj, ECORE_AUDIO_OUT_CLASS);
+   Eina_List *l;
+   Eo *in;
+   pa_stream *stream;
+   pa_operation *op;
+
+   ecore_audio_obj_paused_set(efl_super(eo_obj, MY_CLASS), paused);
+   EINA_LIST_FOREACH(out_obj->inputs, l, in)
+     {
+        stream = efl_key_data_get(in, "pulse_data");
+        if (!stream) continue;
+        op = EPA_CALL(pa_stream_cork)(stream, paused, NULL, NULL);
+        if (op) EPA_CALL(pa_operation_unref)(op);
+     }
+}
 
 EOLIAN static void
 _ecore_audio_out_pulse_ecore_audio_volume_set(Eo *eo_obj, Ecore_Audio_Out_Pulse_Data *pd, double volume)
@@ -107,6 +275,7 @@ static Eina_Bool _input_attach_internal(Eo *eo_obj, Eo *in)
   double speed = 0;
   pa_stream *stream = NULL;
   Eina_Bool ret = EINA_FALSE;
+  pa_cvolume volume;
   Ecore_Audio_Object *ea_obj = efl_data_scope_get(eo_obj, ECORE_AUDIO_CLASS);
   Ecore_Audio_Out_Pulse_Data *pd = efl_data_scope_get(eo_obj, MY_CLASS);
 
@@ -137,10 +306,11 @@ static Eina_Bool _input_attach_internal(Eo *eo_obj, Eo *in)
 
 
   EPA_CALL(pa_stream_set_write_callback)(stream, _write_cb, in);
-  EPA_CALL(pa_stream_connect_playback)(stream, NULL, NULL, PA_STREAM_VARIABLE_RATE, NULL, NULL);
-
-  if (ea_obj->paused)
-    EPA_CALL(pa_operation_unref)(EPA_CALL(pa_stream_cork)(stream, 1, NULL, NULL));
+  EPA_CALL(pa_cvolume_set)(&volume, ss.channels, ea_obj->volume * PA_VOLUME_NORM);
+  EPA_CALL(pa_stream_connect_playback)(stream, NULL, NULL,
+                                      PA_STREAM_VARIABLE_RATE |
+                                      (ea_obj->paused ? PA_STREAM_START_CORKED : 0),
+                                      &volume, NULL);
 
   return ret;
 }

@@ -1,0 +1,25 @@
+class @beta Ecore.Audio.Out.Pipewire extends Ecore.Audio.Out
+{
+   [[Ecore audio output for PipeWire.
+
+     Inputs use individual floating-point playback streams. Connection and
+     stream failures are reported through context,fail. Callbacks and input
+     reads run on the Ecore main loop.
+   ]]
+   c_prefix: ecore_audio_obj_out_pipewire;
+   event_c_prefix: ecore_audio_out_pipewire;
+   implements {
+      Efl.Object.constructor;
+      Efl.Object.destructor;
+      Ecore.Audio.volume { set; }
+      Ecore.Audio.paused { set; }
+      @empty Ecore.Audio.format { set; get; }
+      @empty Ecore.Audio.source { set; get; }
+      Ecore.Audio.Out.input_attach;
+      Ecore.Audio.Out.input_detach;
+   }
+   events {
+      context,ready: void; [[Called when the output is ready for playback.]]
+      context,fail: void; [[Called when the context or a stream fails.]]
+   }
+}
